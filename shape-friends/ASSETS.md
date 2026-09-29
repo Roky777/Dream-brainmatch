@@ -1,6 +1,10 @@
 # Art provenance
 
-## Active presentation — 28 September, kimono Sparky and separate game scenes
+## Active portrait presentation — 29 September
+
+`prototype.css` layers the approved `dream-board-first-v1.png` background and `dream-star-first-v1.png` card emblem over the base layout. `cloud-reveal.js` uses `cloud-veil-v1.png` as a single painted cover, cleared outward from the board. Sparky's visible character layers are hidden for this release; the sprite sheets and animation code are retained for a later pass. The original asset studies below document earlier iterations, not the current screen.
+
+## Earlier presentation — 28 September, kimono Sparky and separate game scenes
 
 `studio.css` is the active layout. It retains the generated `dream-meadow-v1.webp` sky/background, dream star cards and dream object art below; it does not use the newer supplied vertical meadow background. The user supplied five 1448 × 1086 kimono Sparky PNG sheets in `assets/sparky/ChatGPT Image Sep 28, 2026, ...-1.png` through `...-5.png`. `prepare-kimono-sparky.py` makes transparent WebP sheets for expressions, reaching, reactions, peeking, and sleeve/glove studies. The source sheets are retained unmodified. The separate sleeve/glove studies are not played after the stretched-arm version was rejected. The active character uses these user-supplied/generated images; we do not claim hand-drawn animation or frame-by-frame polish.
 
@@ -145,3 +149,6 @@ node shape-friends/prepare-assets.mjs '/path/to/sorting template' '/path/to/gene
 ```
 
 The local Garden font is reused from `../assets/garden.woff2`, under the existing SIL Open Font License in `../assets/OFL.txt`. Card backs, UI marks, pointer, transitions and chimes are original code-created elements.
+# Dream cloud prototype (2026-09-29)
+
+`assets/dream-heaven-v1.png` is an earlier generated portrait background; `assets/dream-heaven-v1.webp` is its optimized copy (`cwebp -q 86`). The current portrait screen uses `dream-board-first-v1.png`; the earlier image remains as a fallback in experimental styles. Built-in image-generation prompt: “Original premium hand-painted 2D animation background for a portrait 9:16 children’s memory-card game. Magical heavenly dream atmosphere: an open luminous cloud meadow in the sky, warm ivory-blue tranquil center, distant softly painted cloud banks and a faint horizon low in the frame, a few tiny floating light motes only at the outer edges. Subtle watercolor-and-gouache texture, delicate inkless forms, naturally coherent single scene. Misty periwinkle, pale lilac, warm cream, peach-gold light, touches of mint. Keep the central 70% exceptionally quiet and low contrast for live cards; upper 15% quiet for compact scoreboard and a small character. Dream mood is dominant; faint orderly rhythms only, not a literal classroom. Soft diffuse morning glow. Background only: no character, cards, UI, text, numbers, score, graph paper, buildings, dense grass, strong rays, border, collage.” The user-provided math-game screenshot was a *clarity reference*, not an image edited or copied into this asset.

@@ -10,6 +10,7 @@ import { Picnic } from './picnic.js';
 import { icon } from '../art.js';
 import { LEVELS, playOptions, resultFor } from './play-options.js';
 import { Dialogue } from './dialogue.js';
+import { CloudReveal } from './cloud-reveal.js';
 
 const $ = id => document.getElementById(id);
 // Board, rim controls and collection drawer form one responsive play object.
@@ -22,7 +23,8 @@ document.querySelector('.mini-sparky').innerHTML = sparkyArt('picnic-sparky');
 const garden = new LivingGarden($('living-garden'), { speak: text => say(text), effect: kind => audio.effect(kind), discovered: save.discoveries.length / 2 });
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 let board, memory, round, mode = 'match', busy = false, run = 0, started = false;
-let tapAnimation = null;
+let tapAnimation = null, tapGeometry = null;
+const cloudReveal = new CloudReveal($('cloud-curtain'), $('cloud-veil'));
 let options = playOptions(), guideMemory = new CompanionMemory();
 const dialogue = new Dialogue();
 const picnic = new Picnic($('picnic'), {
@@ -47,13 +49,27 @@ function updatePause() {
 async function wait(ms, ticket = run) { return await timeline.wait(ms) && ticket === run; }
 function clearPointer() {
   tapAnimation?.cancel(); tapAnimation = null;
-  $('hand').classList.remove('visible');
+  tapGeometry = null;
+  $('hand').classList.remove('visible', 'contact');
+  $('hand').querySelectorAll('path').forEach(path => path.setAttribute('d', ''));
   $('cards').querySelectorAll('.targeted').forEach(node => node.classList.remove('targeted'));
 }
 function clearEffects() {
   clearPointer(); $('effects-layer').replaceChildren(); $('pair-celebration').hidden = true;
   document.querySelector('.pair-thread')?.remove();
   $('cards').querySelectorAll('.hinted').forEach(node => node.classList.remove('hinted'));
+}
+function hideCloudCurtain() {
+  cloudReveal.cancel();
+  $('app').classList.remove('is-unveiling');
+}
+function unveilBoard() {
+  hideCloudCurtain();
+  if (reduced.matches) return;
+  const rect = $('cards').getBoundingClientRect();
+  const focus = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  $('app').classList.add('is-unveiling');
+  cloudReveal.start(focus, hideCloudCurtain);
 }
 function unlocked(id) {
   const index = PACK.rounds.findIndex(item => item.id === id);
@@ -63,6 +79,7 @@ function renderPath() {
   $('chapter-path').innerHTML = PACK.rounds.map(item => `<button type="button" data-round="${item.id}" class="${save.completed.includes(item.id) ? 'done' : ''}" ${item.id === round.id ? 'aria-current="step"' : ''} ${!unlocked(item.id) ? 'disabled' : ''} aria-label="Round ${item.id}: ${item.title}${save.completed.includes(item.id) ? ', completed' : ''}">${item.id}</button>`).join('');
 }
 function startRound(id) {
+  const enteringPlay = mode !== 'match';
   if (!roundById(id) || !unlocked(id)) id = '1';
   run++; timeline.cancel(); audio.stop(); clearEffects(); picnic.cancelDrag();
   round = roundById(id);
@@ -85,6 +102,7 @@ function startRound(id) {
   renderPath(); renderBoard(); renderTray(); updatePause(); sparky.set('greeting', 1400);
   $('cards').querySelectorAll('.card-emblem').forEach(el => { el.innerHTML = icon('star'); });
   say(dialogue.next(options.mode));
+  if (enteringPlay) unveilBoard();
 }
 function renderBoard() {
   const canPlay = board.actor === 'child' && board.phase === 'ready' && !busy && mode === 'match';
@@ -171,34 +189,75 @@ async function resolveTurn(ticket) {
   if (board.actor === 'sparky') await sparkyTurn(ticket);
   else { sparky.set('present-right', 1700); say('Your turn! Pick two.'); }
 }
+function drawReach(progress) {
+  if (!tapGeometry) return;
+  const { from, to, curve, gloveWidth, gloveHeight } = tapGeometry, p = progress;
+  const at = {
+    x: (1-p)**2*from.x + 2*(1-p)*p*curve.x + p*p*to.x,
+    y: (1-p)**2*from.y + 2*(1-p)*p*curve.y + p*p*to.y,
+  };
+  const control = { x:from.x+(curve.x-from.x)*p, y:from.y+(curve.y-from.y)*p };
+  const path = `M ${from.x} ${from.y} Q ${control.x} ${control.y} ${at.x+gloveWidth*.55*p} ${at.y+gloveHeight*.12*p}`;
+  $('hand').querySelectorAll('path').forEach(node => node.setAttribute('d', path));
+  const glove = $('hand').querySelector('.reach-glove');
+  glove.style.left = `${at.x-gloveWidth*.15}px`; glove.style.top = `${at.y-gloveHeight*.43}px`;
+  const sparkle = $('hand').querySelector('.touch-spark');
+  sparkle.style.left = `${at.x}px`; sparkle.style.top = `${at.y}px`;
+}
+function moveReach(from, to, duration) {
+  let elapsed = 0, last = performance.now(), paused = false, finished = false, frame, done;
+  const promise = new Promise(resolve => { done = resolve; });
+  const tick = now => {
+    if (finished) return;
+    if (!paused) {
+      elapsed += Math.min(100, now-last);
+      const t = Math.min(1, elapsed/duration), smooth = t*t*(3-2*t);
+      drawReach(from+(to-from)*smooth);
+      if (t >= 1) { finished = true; done(true); return; }
+    }
+    last = now; frame = requestAnimationFrame(tick);
+  };
+  frame = requestAnimationFrame(tick);
+  return {
+    finished: promise,
+    pause() { paused = true; },
+    play() { paused = false; last = performance.now(); },
+    cancel() { if (!finished) { finished = true; cancelAnimationFrame(frame); done(false); } },
+  };
+}
 async function tapAt(index, ticket) {
   clearPointer();
-  // A deliberate gesture: Sparky aims, releases a separate star, then the
-  // star's contact flips the card. The card never flips before impact.
+  if (getComputedStyle($('hand')).display === 'none') {
+    $('cards').children[index].classList.add('targeted');
+    return await wait(reduced.matches ? 20 : 350, ticket);
+  }
   sparky.set('present-right', 1500);
-  if (!await wait(reduced.matches ? 20 : 260, ticket)) return false;
+  if (!await wait(reduced.matches ? 20 : 180, ticket)) return false;
   const target = $('cards').children[index], rect = target.getBoundingClientRect();
   const character = $('sparky').getBoundingClientRect();
-  const shoulder = {x:character.left + character.width*.25,y:character.top + character.height*.58};
-  const tip = {x:rect.left + rect.width*.53,y:rect.top + rect.height*.53};
-  const hand = $('hand');
-  hand.style.left = `${shoulder.x-28}px`;
-  hand.style.top = `${shoulder.y-28}px`;
-  hand.classList.add('visible');
-  const dx=tip.x-shoulder.x,dy=tip.y-shoulder.y;
-  tapAnimation = hand.animate([
-    {transform:'translate(0,0) scale(.42) rotate(-35deg)',opacity:0},
-    {transform:`translate(${dx*.15}px,${dy*.15-28}px) scale(1) rotate(10deg)`,opacity:1,offset:.2},
-    {transform:`translate(${dx*.62}px,${dy*.62-54}px) scale(1.12) rotate(110deg)`,opacity:1,offset:.65},
-    {transform:`translate(${dx}px,${dy}px) scale(1.35) rotate(195deg)`,opacity:1},
-  ],{duration:reduced.matches?90:570,easing:'cubic-bezier(.33,.13,.35,1)',fill:'forwards'});
-  try { await tapAnimation.finished; } catch { return false; }
-  target.classList.add('targeted');
-  return ticket === run && await wait(reduced.matches?20:100,ticket);
+  const from = {x:character.left+character.width*.7,y:character.top+character.height*.84};
+  const to = {x:rect.left+rect.width*.5,y:rect.top+rect.height*.5};
+  const glove = $('hand').querySelector('.reach-glove');
+  tapGeometry = {from,to,curve:{x:from.x+(to.x-from.x)*.34,y:from.y+(to.y-from.y)*.42-Math.min(22,innerHeight*.03)},gloveWidth:glove.offsetWidth,gloveHeight:glove.offsetHeight};
+  $('hand').querySelector('svg').setAttribute('viewBox',`0 0 ${innerWidth} ${innerHeight}`);
+  drawReach(0); $('hand').classList.add('visible');
+  tapAnimation = moveReach(0, 1, reduced.matches ? 90 : 570);
+  if (!await tapAnimation.finished || ticket !== run) return false;
+  target.classList.add('targeted'); $('hand').classList.add('contact');
+  return await wait(reduced.matches ? 20 : 120, ticket);
 }
 async function finishTap(ticket) {
+  if (ticket !== run) return false;
+  if (!tapGeometry) {
+    clearPointer();
+    return await wait(reduced.matches ? 20 : 90, ticket);
+  }
+  if (!await wait(reduced.matches ? 20 : 150, ticket)) return false;
+  $('hand').classList.remove('contact');
+  tapAnimation = moveReach(1, 0, reduced.matches ? 80 : 320);
+  if (!await tapAnimation.finished || ticket !== run) return false;
   clearPointer();
-  return ticket === run && await wait(reduced.matches?20:100,ticket);
+  return await wait(reduced.matches ? 20 : 50, ticket);
 }
 async function sparkyTurn(ticket) {
   busy = true; renderBoard(); sparky.set('thinking');
@@ -322,7 +381,7 @@ $('restart-round').addEventListener('click', () => { $('settings-dialog').close(
 for (const key of ['voice', 'effects']) $(`${key}-toggle`).addEventListener('click', () => { save[key] = !save[key]; if (key === 'voice') audio.stop(); persist(); settingsUI(); });
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('settings-dialog').open) { event.preventDefault(); openSettings(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden) picnic.cancelDrag(); updatePause(); });
-window.addEventListener('resize', () => { renderTray(); clearPointer(); });
+window.addEventListener('resize', () => { renderTray(); if (board?.actor !== 'sparky') clearPointer(); });
 document.addEventListener('pointerdown', activateAudio, { once: true });
 document.addEventListener('keydown', activateAudio, { once: true });
 // A suggestion only: never lock orientation or interrupt an unfinished turn.
@@ -335,10 +394,11 @@ function setupUI() {
   document.querySelectorAll('button[data-play-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.playMode === options.mode)));
   document.querySelectorAll('button[data-level]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.level === options.level)));
   const level = LEVELS[options.level];
-  $('level-description').textContent = options.mode === 'practice' ? `${level.pairs * 2} cards · Take your time. Tap Sparky for help.` : level.description;
+  $('level-description').textContent = options.mode === 'practice' ? `${level.pairs * 2} cards · Take your time.` : level.description;
 }
 function showSetup() {
   run++; timeline.cancel(); audio.stop(); clearEffects(); picnic.cancelDrag(); busy = false;
+  hideCloudCurtain();
   mode = 'setup'; $('app').dataset.mode = mode;
   $('setup-view').hidden = false; $('play-layout').hidden = true; $('explore-view').hidden = true;
   $('result-view').hidden = true; $('discovery-strip').hidden = true;

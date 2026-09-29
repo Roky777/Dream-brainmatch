@@ -3,7 +3,9 @@ export const SPARKY_CLIPS = Object.freeze({
   idle: { sheet:'peek', frames:[11,10,11], times:[2400,200,1200], loop:true },
   greeting: { sheet:'expressions', frames:[4,5,6,7,4], times:[220,220,220,250,650], loop:false },
   thinking: { sheet:'expressions', frames:[8,9,10], times:[230,320,900], loop:false },
-  'present-right': { sheet:'reach', frames:[0,1,2,3], times:[130,130,130,700], loop:false },
+  // The procedural sleeve supplies the long reach. Keep the base sprite's
+  // own glove near his chest, otherwise two pointing hands appear onscreen.
+  'present-right': { sheet:'reach', frames:[0,1,1], times:[130,130,830], loop:false },
   happy: { sheet:'reactions', frames:[0,1,2,3,4,5], times:[150,170,190,210,240,800], loop:false },
   'thumbs-up': { sheet:'reactions', frames:[4,5,6,7], times:[170,180,180,400], loop:false },
 });

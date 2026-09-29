@@ -7,7 +7,7 @@ test('Sparky plays the supplied kimono peeking, pointing and celebration frames'
   assert.deepEqual(spriteFrame('idle',0),{sheet:'peek',frame:11});
   assert.deepEqual(spriteFrame('idle',2450),{sheet:'peek',frame:10});
   assert.deepEqual(spriteFrame('thinking',500),{sheet:'expressions',frame:1+8});
-  assert.deepEqual(spriteFrame('present-right',500),{sheet:'reach',frame:3});
+  assert.deepEqual(spriteFrame('present-right',500),{sheet:'reach',frame:1});
   assert.deepEqual(spriteFrame('happy',300),{sheet:'reactions',frame:1});
   assert.deepEqual(spriteFrame('happy',600),{sheet:'reactions',frame:3});
   for(const pose of Object.keys(SPARKY_CLIPS)){
